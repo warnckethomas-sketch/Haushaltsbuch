@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "exportDate": "2026-08-06 14:26:36",
+  "categories": [
+    {
+      "id": 1,
+      "name": "Gehalt",
+      "type": "Einnahme"
+    },
+    {
+      "id": 2,
+      "name": "Nebeneinkommen",
+      "type": "Einnahme"
+    },
+    {
+      "id": 3,
+      "name": "Miete & Wohnen",
+      "type": "Fixkosten"
+    },
+    {
+      "id": 4,
+      "name": "Versicherungen",
+      "type": "Fixkosten"
+    },
+    {
+      "id": 5,
+      "name": "Strom & Heizung",
+      "type": "Fixkosten"
+    },
+    {
+      "id": 6,
+      "name": "Internet & Telefon",
+      "type": "Fixkosten"
+    },
+    {
+      "id": 7,
+      "name": "Abonnements",
+      "type": "Wiederkehrend"
+    },
+    {
+      "id": 8,
+      "name": "Lebensmittel",
+      "type": "Ausgabe"
+    },
+    {
+      "id": 9,
+      "name": "Freizeit",
+      "type": "Ausgabe"
+    },
+    {
+      "id": 10,
+      "name": "Rechnungen",
+      "type": "Rechnung"
+    },
+    {
+      "id": 11,
+      "name": "Sonstiges",
+      "type": "Sonstiges"
+    }
+  ],
+  "income": [],
+  "incomes": [],
+  "fixed_costs": [],
+  "fixedCosts": [],
+  "recurring_expenses": [],
+  "recurringExpenses": [],
+  "invoices": [],
+  "pflegegeld": []
+}

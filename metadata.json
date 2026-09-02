@@ -1,0 +1,8 @@
+{
+  "name": "Remix Haushaltsbuch \u0026 Monatsübersicht",
+  "description": "Finanz- und Kostenplaner mit Erfassung von Fixkosten, wiederkehrenden Ausgaben, Rechnungen, Einnahmen und Druckfunktion.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

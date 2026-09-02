@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Haushaltsbuch
+Comment=Finanz- und Kostenplaner mit Monatsübersicht & Berechnungen
+Exec=python3 /home/thomasw/Dokumente/software/Haushaltsbuch/haushaltsbuch.py
+Path=/home/thomasw/Dokumente/software/Haushaltsbuch
+Icon=/home/thomasw/Dokumente/software/Haushaltsbuch/bank_logo.png
+Terminal=false
+Type=Application
+Categories=Office;Finance;
+

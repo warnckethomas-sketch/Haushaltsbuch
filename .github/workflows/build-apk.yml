@@ -1,0 +1,107 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Debug APK
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '21'
+          cache: 'gradle'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+
+      - name: Create empty env files
+        run: |
+          touch .env
+          touch .env.example
+
+      - name: Decode or Generate Debug Keystore
+        run: |
+          if [ -f debug.keystore.base64 ]; then
+            base64 -d debug.keystore.base64 > debug.keystore
+            echo "Successfully decoded debug.keystore!"
+          else
+            echo "debug.keystore.base64 not found, generating a new debug.keystore on the fly..."
+            keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+            echo "Successfully generated new debug.keystore!"
+          fi
+
+      - name: Build Debug APK
+        run: gradle :app:assembleDebug
+
+      - name: Rename APK using Project Name and Move to apk Folder
+        run: |
+          PROJECT_NAME=""
+          if [ -f metadata.json ]; then
+            PROJECT_NAME=$(jq -r '.name' metadata.json)
+          fi
+
+          if [ -z "$PROJECT_NAME" ] || [ "$PROJECT_NAME" = "null" ]; then
+            PROJECT_NAME="CareApp"
+          fi
+
+          CLEAN_NAME=$(echo "$PROJECT_NAME" | sed 's/[^a-zA-Z0-9_-]/_/g')
+          APK_DIR="app/build/outputs/apk/debug"
+          NEW_APK_NAME="${CLEAN_NAME}-debug.apk"
+
+          # Ordner 'apk' im Hauptverzeichnis erstellen
+          mkdir -p apk
+
+          # APK umbenennen und in den neuen Ordner 'apk' verschieben
+          mv "${APK_DIR}/app-debug.apk" "apk/${NEW_APK_NAME}"
+
+          echo "NEW_APK_PATH=apk/${NEW_APK_NAME}" >> $GITHUB_ENV
+          echo "CLEAN_PROJECT_NAME=${CLEAN_NAME}" >> $GITHUB_ENV
+          echo "Renamed and moved APK to apk/${NEW_APK_NAME}"
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.CLEAN_PROJECT_NAME }}-apk
+          path: apk/
+
+      - name: Commit and Push APK to Repo
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add apk/
+          if ! git diff --cached --quiet; then
+            git commit -m "Auto-generated APK preview [skip ci]"
+            git push origin HEAD:${{ github.ref }}
+          else
+            echo "No changes in APK folder to commit"
+          fi
+
+      - name: Delete Old Workflow Runs
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          retain_days: 0
+          keep_minimum_runs: 1
