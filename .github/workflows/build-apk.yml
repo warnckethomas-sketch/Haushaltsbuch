@@ -54,54 +54,44 @@ jobs:
       - name: Build Debug APK
         run: gradle :app:assembleDebug
 
-      - name: Rename APK using Project Name and Move to apk Folder
+      - name: Copy and Rename APK to Haushaltsbuch.apk
         run: |
-          PROJECT_NAME=""
-          if [ -f metadata.json ]; then
-            PROJECT_NAME=$(jq -r '.name' metadata.json)
-          fi
-
-          if [ -z "$PROJECT_NAME" ] || [ "$PROJECT_NAME" = "null" ]; then
-            PROJECT_NAME="CareApp"
-          fi
-
-          CLEAN_NAME=$(echo "$PROJECT_NAME" | sed 's/[^a-zA-Z0-9_-]/_/g')
-          APK_DIR="app/build/outputs/apk/debug"
-          NEW_APK_NAME="${CLEAN_NAME}-debug.apk"
-
-          # Ordner 'apk' im Hauptverzeichnis erstellen
           mkdir -p apk
-
-          # APK umbenennen und in den neuen Ordner 'apk' verschieben
-          mv "${APK_DIR}/app-debug.apk" "apk/${NEW_APK_NAME}"
-
-          echo "NEW_APK_PATH=apk/${NEW_APK_NAME}" >> $GITHUB_ENV
-          echo "CLEAN_PROJECT_NAME=${CLEAN_NAME}" >> $GITHUB_ENV
-          echo "Renamed and moved APK to apk/${NEW_APK_NAME}"
+          rm -f apk/*.apk
+          APK_DIR="app/build/outputs/apk/debug"
+          cp "${APK_DIR}/app-debug.apk" "apk/Haushaltsbuch.apk"
+          echo "NEW_APK_PATH=apk/Haushaltsbuch.apk" >> $GITHUB_ENV
+          echo "CLEAN_PROJECT_NAME=Haushaltsbuch" >> $GITHUB_ENV
+          echo "Renamed and copied APK to apk/Haushaltsbuch.apk"
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.CLEAN_PROJECT_NAME }}-apk
+          name: Haushaltsbuch-apk
           path: apk/
 
       - name: Commit and Push APK to Repo
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/dev')
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add apk/
           if ! git diff --cached --quiet; then
-            git commit -m "Auto-generated APK preview [skip ci]"
+            git commit -m "Auto-generated APK: Haushaltsbuch.apk [skip ci]"
             git push origin HEAD:${{ github.ref }}
           else
             echo "No changes in APK folder to commit"
           fi
 
       - name: Delete Old Workflow Runs
-        uses: Mattraks/delete-workflow-runs@v2
-        with:
-          token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          retain_days: 0
-          keep_minimum_runs: 1
+        if: always()
+        run: |
+          echo "Deleting old workflow runs..."
+          export GITHUB_TOKEN="${{ secrets.GITHUB_TOKEN }}"
+          runs=$(gh run list --json databaseId -q '.[].databaseId' 2>/dev/null || true)
+          for run_id in $runs; do
+            if [ -n "$run_id" ] && [ "$run_id" != "${{ github.run_id }}" ]; then
+              echo "Deleting old run: $run_id"
+              gh run delete "$run_id" || true
+            fi
+          done
