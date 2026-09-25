@@ -251,11 +251,17 @@ object PrintHelper {
             htmlBuilder.append("""<tr><td colspan="5" style="text-align:center; color:#94a3b8;">Keine Fixkosten erfasst.</td></tr>""")
         } else {
             for (fc in activeFixed) {
+                val dueStr = if (fc.endYear != null && fc.endMonth != null) {
+                    val yy = fc.endYear % 100
+                    String.format(Locale.GERMANY, "%d. des Monats (bis %02d-%02d)", fc.dueDayOfMonth, fc.endMonth, yy)
+                } else {
+                    "${fc.dueDayOfMonth}. des Monats"
+                }
                 htmlBuilder.append("""
                     <tr>
                         <td>${fc.title}</td>
                         <td>${fc.category}</td>
-                        <td>${fc.dueDayOfMonth}. des Monats</td>
+                        <td>$dueStr</td>
                         <td class="amount-col negative">-${fmt.format(fc.amount)}</td>
                         <td class="check-col"><span class="check-box">&nbsp;</span></td>
                     </tr>
@@ -287,11 +293,17 @@ object PrintHelper {
             htmlBuilder.append("""<tr><td colspan="5" style="text-align:center; color:#94a3b8;">Keine wiederkehrenden Sonderausgaben fällig.</td></tr>""")
         } else {
             for (re in activeRecurring) {
+                val intervalStr = if (re.endYear != null && re.endMonth != null) {
+                    val yy = re.endYear % 100
+                    String.format(Locale.GERMANY, "%s (bis %02d-%02d)", re.getIntervalText(), re.endMonth, yy)
+                } else {
+                    re.getIntervalText()
+                }
                 htmlBuilder.append("""
                     <tr>
                         <td>${re.title}</td>
                         <td>${re.category}</td>
-                        <td>${re.getIntervalText()}</td>
+                        <td>$intervalStr</td>
                         <td class="amount-col negative">-${fmt.format(re.getAmountForMonth(year, mNum))}</td>
                         <td class="check-col"><span class="check-box">&nbsp;</span></td>
                     </tr>

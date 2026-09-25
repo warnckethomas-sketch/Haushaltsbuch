@@ -255,7 +255,13 @@ fun PrintPreviewScreen(
                         Text("Keine Fixkosten erfasst.", style = MaterialTheme.typography.bodySmall, color = Color.Gray, modifier = Modifier.padding(vertical = 2.dp))
                     } else {
                         activeFixed.forEachIndexed { index, fc ->
-                            PrintTableRow(fc.title, fc.category, "-${fmt.format(fc.amount)}", ExpenseRed, isEven = index % 2 == 1, showGebuchtBox = true)
+                            val dueStr = if (fc.endYear != null && fc.endMonth != null) {
+                                val yy = fc.endYear % 100
+                                String.format(Locale.GERMANY, "%d. des Monats (bis %02d-%02d)", fc.dueDayOfMonth, fc.endMonth, yy)
+                            } else {
+                                "${fc.dueDayOfMonth}. des Monats"
+                            }
+                            PrintTableRow(fc.title, fc.category, dueStr, ExpenseRed, isEven = index % 2 == 1, showGebuchtBox = true)
                         }
                     }
                     PrintTableTotalRow("Gesamt Fixkosten", "-${fmt.format(totalFixed)}", ExpenseRed, hasGebuchtCol = true)
@@ -268,7 +274,13 @@ fun PrintPreviewScreen(
                         Text("Keine wiederkehrenden Sonderausgaben.", style = MaterialTheme.typography.bodySmall, color = Color.Gray, modifier = Modifier.padding(vertical = 2.dp))
                     } else {
                         activeRecurring.forEachIndexed { index, re ->
-                            PrintTableRow(re.title, "${re.category} (${re.getIntervalText()})", "-${fmt.format(re.getAmountForMonth(year, mNum))}", ExpenseRed, isEven = index % 2 == 1, showGebuchtBox = true)
+                            val intervalStr = if (re.endYear != null && re.endMonth != null) {
+                                val yy = re.endYear % 100
+                                String.format(Locale.GERMANY, "%s (bis %02d-%02d)", re.getIntervalText(), re.endMonth, yy)
+                            } else {
+                                re.getIntervalText()
+                            }
+                            PrintTableRow(re.title, "${re.category} ($intervalStr)", "-${fmt.format(re.getAmountForMonth(year, mNum))}", ExpenseRed, isEven = index % 2 == 1, showGebuchtBox = true)
                         }
                     }
                     PrintTableTotalRow("Gesamt Wiederkehrend ($monthName)", "-${fmt.format(totalRecurring)}", ExpenseRed, hasGebuchtCol = true)

@@ -1555,7 +1555,8 @@ class DIN5008PDFGenerator:
                     dom = safe_int(r[5] if len(r) > 5 else 1, 1)
                     rhythm_str = f"zum {dom}. des Monats"
                     if e_y > 0 and e_m > 0:
-                        rhythm_str += f" (bis {get_german_month_name(e_m)[:3]} {e_y})"
+                        yy = e_y % 100
+                        rhythm_str += f" (bis {e_m:02d}-{yy:02d})"
                     amt = safe_float(r[2], 0.0)
                     fix_rows.append([r[1], r[3], rhythm_str, f"-{fmt_de(amt)}", '[ ]'])
                     tot_fix += amt
@@ -1938,6 +1939,10 @@ class HaushaltsbuchApp(tk.Tk):
         self.create_widgets()
         self.refresh_all_views()
 
+        # Tastenkürzel für Vollbild (F11 zum Umschalten, Escape zum Verlassen)
+        self.bind("<F11>", self.toggle_fullscreen)
+        self.bind("<Escape>", self.exit_fullscreen)
+
         # Dynamische Zentrierung des Hauptfensters mittig auf dem Bildschirm
         self.update_idletasks()
         screen_w = self.winfo_screenwidth()
@@ -1954,6 +1959,15 @@ class HaushaltsbuchApp(tk.Tk):
         pos_x = max(0, (screen_w - win_w) // 2)
         pos_y = max(0, (screen_h - win_h) // 2)
         self.geometry(f"{win_w}x{win_h}+{pos_x}+{pos_y}")
+
+        # Standardmäßig maximiert ("Vollbild-Fenstermodus") starten
+        try:
+            self.state("zoomed")
+        except tk.TclError:
+            try:
+                self.attributes("-zoomed", True)
+            except tk.TclError:
+                pass
 
         # Vorherige temporäre Druckdateien beim Start bereinigen
         self.cleanup_all_temp_files()
@@ -1985,6 +1999,38 @@ class HaushaltsbuchApp(tk.Tk):
             print(f"[WARNUNG] Sicherung beim Schließen fehlgeschlagen: {e}")
         self.cleanup_all_temp_files()
         self.destroy()
+
+    def toggle_fullscreen(self, event=None):
+        """Schaltet zwischen Vollbildmodus und Fensteransicht um."""
+        try:
+            is_full = bool(self.attributes("-fullscreen"))
+            new_state = not is_full
+            self.attributes("-fullscreen", new_state)
+            if hasattr(self, "btn_fullscreen"):
+                self.btn_fullscreen.config(text="🗗 Fenster" if new_state else "⛶ Vollbild")
+        except Exception:
+            try:
+                curr_state = self.state()
+                if curr_state == "zoomed":
+                    self.state("normal")
+                    if hasattr(self, "btn_fullscreen"):
+                        self.btn_fullscreen.config(text="⛶ Vollbild")
+                else:
+                    self.state("zoomed")
+                    if hasattr(self, "btn_fullscreen"):
+                        self.btn_fullscreen.config(text="🗗 Fenster")
+            except Exception as e:
+                print(f"[WARNUNG] Vollbild-Umschaltung: {e}")
+
+    def exit_fullscreen(self, event=None):
+        """Beendet den Vollbildmodus (z. B. mit Escape)."""
+        try:
+            if bool(self.attributes("-fullscreen")):
+                self.attributes("-fullscreen", False)
+                if hasattr(self, "btn_fullscreen"):
+                    self.btn_fullscreen.config(text="⛶ Vollbild")
+        except Exception:
+            pass
 
     def setup_styles(self):
         style = ttk.Style(self)
@@ -2133,6 +2179,9 @@ class HaushaltsbuchApp(tk.Tk):
 
         btn_settings = ttk.Button(self.actions_frame, text="⚙️ Einstellungen / Backup", command=self.open_settings_dialog)
         btn_settings.pack(side="left", padx=4)
+
+        self.btn_fullscreen = ttk.Button(self.actions_frame, text="⛶ Vollbild", command=self.toggle_fullscreen)
+        self.btn_fullscreen.pack(side="left", padx=4)
 
         btn_exit = ttk.Button(self.actions_frame, text="🚪 Beenden", command=self.on_exit, style="Exit.TButton")
         btn_exit.pack(side="left", padx=4)
