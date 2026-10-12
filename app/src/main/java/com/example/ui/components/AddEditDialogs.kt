@@ -7,6 +7,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -16,11 +18,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.entities.CarePayer
 import com.example.data.entities.CategoryType
 import com.example.data.entities.FixedCost
 import com.example.data.entities.Income
 import com.example.data.entities.Invoice
 import com.example.data.entities.RecurringExpense
+import com.example.data.entities.serializeCarePayers
 import java.text.NumberFormat
 import java.util.Calendar
 import java.util.Locale
@@ -964,6 +968,12 @@ fun AddEditInvoiceDialog(
     )
 }
 
+data class CarePayerInput(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val name: String = "",
+    val percentageText: String = "100"
+)
+
 // --- 4. INCOME DIALOG ---
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -987,7 +997,6 @@ fun AddEditIncomeDialog(
 
     var isPflegegeld by remember { mutableStateOf(initialIncome?.isCareAllowanceItem ?: isPflegegeldMode) }
     var title by remember { mutableStateOf(initialIncome?.title ?: "") }
-    var sender by remember { mutableStateOf(initialIncome?.sender ?: "") }
     
     // Pflegegeld specific states
     var selectedPflegegrad by remember { mutableStateOf<Int?>(initialIncome?.pflegegrad ?: if (isPflegegeld) 3 else null) }
@@ -1005,11 +1014,24 @@ fun AddEditIncomeDialog(
             else if (isPflegegeld) defaultHilfsmittel.toString() else "0.0"
         ) 
     }
-    var percentageShareText by remember { 
-        mutableStateOf(
-            if (initialIncome?.percentageShare != null) initialIncome.percentageShare.toString() else "100"
-        ) 
+
+    // Care Payers (Wer zahlt das Pflegegeld - mehrere Zahler mit Anteilen und Summen)
+    val initialPayers = remember(initialIncome) {
+        val existing = initialIncome?.getCarePayers() ?: emptyList()
+        if (existing.isNotEmpty()) {
+            existing.map { p ->
+                val pStr = if (p.percentage % 1.0 == 0.0) p.percentage.toInt().toString() else p.percentage.toString()
+                CarePayerInput(name = p.name, percentageText = pStr)
+            }
+        } else {
+            val defaultSender = initialIncome?.sender ?: ""
+            val defaultPct = if (initialIncome != null) {
+                if (initialIncome.percentageShare % 1.0 == 0.0) initialIncome.percentageShare.toInt().toString() else initialIncome.percentageShare.toString()
+            } else "100"
+            listOf(CarePayerInput(name = defaultSender, percentageText = defaultPct))
+        }
     }
+    var carePayers by remember { mutableStateOf(initialPayers) }
 
     var amountText by remember { mutableStateOf(initialIncome?.amount?.let { if (it > 0) it.toString() else "" } ?: "") }
     var isRecurring by remember { mutableStateOf(initialIncome?.isRecurring ?: (initialIncome?.overriddenIncomeId == null)) }
@@ -1029,8 +1051,8 @@ fun AddEditIncomeDialog(
     val baseVal = pflegegeldBaseText.toDoubleOrNull() ?: 0.0
     val aidsVal = pflegehilfsmittelText.toDoubleOrNull() ?: 0.0
     val totalCareBase = baseVal + aidsVal
-    val pctVal = percentageShareText.toDoubleOrNull() ?: 100.0
-    val computedCarePayout = totalCareBase * (pctVal / 100.0)
+    val totalPayerPercentages = carePayers.sumOf { it.percentageText.toDoubleOrNull() ?: 0.0 }
+    val totalCarePayout = carePayers.sumOf { totalCareBase * ((it.percentageText.toDoubleOrNull() ?: 0.0) / 100.0) }
 
     val fmt = NumberFormat.getCurrencyInstance(Locale.GERMANY)
 
@@ -1117,18 +1139,9 @@ fun AddEditIncomeDialog(
                 )
 
                 if (isPflegegeld) {
-                    OutlinedTextField(
-                        value = sender,
-                        onValueChange = { sender = it; showError = false },
-                        label = { Text("Überweiser / Pflegekasse / Zahler *") },
-                        placeholder = { Text("z.B. AOK Pflegekasse, Barmer, Privat") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    // 1. Pflegegrad & Pflegehilfsmittel Section
+                    // 1. Einstufung & monatliche Erfassung
                     Divider()
-                    Text("1. Gesamtsumme Pflege (Pflegegrad & Hilfsmittel)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                    Text("1. Einstufung & monatliche Erfassung", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
 
                     Text("Pflegegrad auswählen:", style = MaterialTheme.typography.bodySmall)
                     Row(
@@ -1160,7 +1173,8 @@ fun AddEditIncomeDialog(
                                 pflegegeldBaseText = it.replace(',', '.')
                                 selectedPflegegrad = null 
                             },
-                            label = { Text("Pflegegeld (€) *") },
+                            label = { Text("Pflegegeldhöhe (€) *") },
+                            placeholder = { Text("572.00") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             singleLine = true,
                             modifier = Modifier.weight(1f)
@@ -1169,7 +1183,7 @@ fun AddEditIncomeDialog(
                         OutlinedTextField(
                             value = pflegehilfsmittelText,
                             onValueChange = { pflegehilfsmittelText = it.replace(',', '.') },
-                            label = { Text("Pflegehilfsmittel (€)") },
+                            label = { Text("Hilfsmittel Betrag (€)") },
                             placeholder = { Text("42.00") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             singleLine = true,
@@ -1194,50 +1208,167 @@ fun AddEditIncomeDialog(
                                 Text(fmt.format(totalCareBase), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                             }
                             Text(
-                                text = "Basis Pflegegeld (${fmt.format(baseVal)}) + Hilfsmittel (${fmt.format(aidsVal)})",
+                                text = "Pflegegeldhöhe (${fmt.format(baseVal)}) + Hilfsmittel (${fmt.format(aidsVal)})",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
 
-                    // 2. Überweiser Anteil Section
+                    // 2. Unterbereich: Wer zahlt das Pflegegeld (Zahler mit Pluszeichen)
                     Divider()
-                    Text("2. Anteil dieses Überweisers (%)", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("2. Wer zahlt das Pflegegeld", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                            Text("Zahler & prozentuale Aufteilung", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                        }
+                        FilledTonalButton(
+                            onClick = {
+                                val currentSum = carePayers.sumOf { it.percentageText.toDoubleOrNull() ?: 0.0 }
+                                val remaining = if (currentSum < 100.0) (100.0 - currentSum) else 50.0
+                                val remStr = if (remaining % 1.0 == 0.0) remaining.toInt().toString() else String.format(Locale.US, "%.1f", remaining)
+                                carePayers = carePayers + CarePayerInput(name = "", percentageText = remStr)
+                            },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier.height(34.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "Zahler hinzufügen", modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Zahler", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
 
-                    OutlinedTextField(
-                        value = percentageShareText,
-                        onValueChange = { percentageShareText = it.replace(',', '.') },
-                        label = { Text("Prozentualer Anteil (%) *") },
-                        placeholder = { Text("100") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    carePayers.forEachIndexed { index, payer ->
+                        val payerPct = payer.percentageText.toDoubleOrNull() ?: 0.0
+                        val payerCalculatedAmount = totalCareBase * (payerPct / 100.0)
 
-                    // Card showing computed payout for this sender
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            ),
+                            border = CardDefaults.outlinedCardBorder()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(10.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Zahler ${index + 1}",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.tertiary
+                                    )
+                                    if (carePayers.size > 1) {
+                                        IconButton(
+                                            onClick = {
+                                                carePayers = carePayers.toMutableList().apply { removeAt(index) }
+                                            },
+                                            modifier = Modifier.size(28.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Close,
+                                                contentDescription = "Zahler entfernen",
+                                                tint = MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                OutlinedTextField(
+                                    value = payer.name,
+                                    onValueChange = { newName ->
+                                        carePayers = carePayers.toMutableList().apply {
+                                            this[index] = this[index].copy(name = newName)
+                                        }
+                                        showError = false
+                                    },
+                                    label = { Text("Name des Zahlers / Kasse *") },
+                                    placeholder = { Text("z.B. AOK Pflegekasse, Beihilfe, Barmer, Privat") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    OutlinedTextField(
+                                        value = payer.percentageText,
+                                        onValueChange = { newPct ->
+                                            carePayers = carePayers.toMutableList().apply {
+                                                this[index] = this[index].copy(percentageText = newPct.replace(',', '.'))
+                                            }
+                                        },
+                                        label = { Text("Anteil (%) *") },
+                                        placeholder = { Text("100") },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                                        singleLine = true,
+                                        modifier = Modifier.weight(1f)
+                                    )
+
+                                    Surface(
+                                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.weight(1.3f)
+                                    ) {
+                                        Column(modifier = Modifier.padding(8.dp)) {
+                                            Text(
+                                                text = "Errechnete Summe:",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
+                                            )
+                                            Text(
+                                                text = "+${fmt.format(payerCalculatedAmount)}",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.tertiary
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Card showing total computed payout from all payers
                     Card(
                         colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                            containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.45f)
                         ),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Auszahlungssumme aller Zahler:", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                                Text(
+                                    text = "+${fmt.format(totalCarePayout)}",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.tertiary
+                                )
+                            }
+                            val pctFormatted = if (totalPayerPercentages % 1.0 == 0.0) totalPayerPercentages.toInt().toString() else String.format(Locale.US, "%.1f", totalPayerPercentages)
                             Text(
-                                text = "Auszahlungsbetrag für Überweiser '${sender.ifBlank { "Unbenannt" }}':",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onTertiaryContainer
-                            )
-                            Text(
-                                text = fmt.format(computedCarePayout),
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.tertiary
-                            )
-                            Text(
-                                text = "$pctVal % von ${fmt.format(totalCareBase)} Gesamtsumme",
+                                text = "Summe Anteile: $pctFormatted % von ${fmt.format(totalCareBase)} (${carePayers.size} ${if (carePayers.size == 1) "Zahler" else "Zahler"})",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
+                                color = if (kotlin.math.abs(totalPayerPercentages - 100.0) < 0.01) MaterialTheme.colorScheme.onTertiaryContainer else MaterialTheme.colorScheme.error,
+                                fontWeight = FontWeight.SemiBold
                             )
                         }
                     }
@@ -1335,7 +1466,7 @@ fun AddEditIncomeDialog(
 
                 if (showError) {
                     Text(
-                        if (isPflegegeld && sender.isBlank()) "Bitte Bezeichnung, Überweiser und Betrag eingeben."
+                        if (isPflegegeld) "Bitte Bezeichnung, mindestens einen Zahler mit Namen und Betrag eingeben."
                         else "Bitte Bezeichnung und Betrag eingeben.",
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall
@@ -1345,30 +1476,76 @@ fun AddEditIncomeDialog(
         },
         confirmButton = {
             Button(onClick = {
-                val finalAmount = if (isPflegegeld) computedCarePayout else (amountText.toDoubleOrNull() ?: 0.0)
                 val parsedYear = specificYearText.toIntOrNull() ?: defaultSelectedYear
 
-                if (title.isBlank() || finalAmount <= 0 || (isPflegegeld && sender.isBlank())) {
-                    showError = true
+                if (isPflegegeld) {
+                    val validPayers = carePayers.filter { it.name.isNotBlank() }
+                    val finalAmount = totalCarePayout
+
+                    if (title.isBlank() || validPayers.isEmpty() || finalAmount <= 0) {
+                        showError = true
+                    } else {
+                        val payersList = carePayers.map { p ->
+                            val pPct = p.percentageText.toDoubleOrNull() ?: 0.0
+                            val pAmt = totalCareBase * (pPct / 100.0)
+                            CarePayer(
+                                name = p.name.trim(),
+                                percentage = pPct,
+                                calculatedAmount = pAmt
+                            )
+                        }
+                        val payersJsonStr = serializeCarePayers(payersList)
+                        val combinedSender = payersList.joinToString(", ") { p ->
+                            val pPctStr = if (p.percentage % 1.0 == 0.0) p.percentage.toInt().toString() else p.percentage.toString()
+                            "${p.name} ($pPctStr%)"
+                        }
+
+                        val inc = (initialIncome ?: Income(title = "", amount = 0.0, category = "Pflegegeld")).copy(
+                            title = title.trim(),
+                            amount = finalAmount,
+                            isRecurring = if (isOverride) false else isRecurring,
+                            specificYear = if (!isRecurring || isOverride) parsedYear else null,
+                            specificMonth = if (!isRecurring || isOverride) specificMonth else null,
+                            category = "Pflegegeld",
+                            notes = notes.trim(),
+                            isActive = isActive,
+                            overriddenIncomeId = initialIncome?.overriddenIncomeId,
+                            isPflegegeld = true,
+                            sender = combinedSender,
+                            pflegegrad = selectedPflegegrad,
+                            pflegegeldBaseAmount = baseVal,
+                            pflegehilfsmittelAmount = aidsVal,
+                            percentageShare = totalPayerPercentages,
+                            carePayersJson = payersJsonStr
+                        )
+                        onSave(inc)
+                    }
                 } else {
-                    val inc = (initialIncome ?: Income(title = "", amount = 0.0, category = "")).copy(
-                        title = title.trim(),
-                        amount = finalAmount,
-                        isRecurring = if (isOverride) false else isRecurring,
-                        specificYear = if (!isRecurring || isOverride) parsedYear else null,
-                        specificMonth = if (!isRecurring || isOverride) specificMonth else null,
-                        category = if (isPflegegeld) "Pflegegeld" else category,
-                        notes = notes.trim(),
-                        isActive = isActive,
-                        overriddenIncomeId = initialIncome?.overriddenIncomeId,
-                        isPflegegeld = isPflegegeld,
-                        sender = if (isPflegegeld) sender.trim() else "",
-                        pflegegrad = if (isPflegegeld) selectedPflegegrad else null,
-                        pflegegeldBaseAmount = if (isPflegegeld) baseVal else 0.0,
-                        pflegehilfsmittelAmount = if (isPflegegeld) aidsVal else 0.0,
-                        percentageShare = if (isPflegegeld) pctVal else 100.0
-                    )
-                    onSave(inc)
+                    val finalAmount = amountText.toDoubleOrNull() ?: 0.0
+
+                    if (title.isBlank() || finalAmount <= 0) {
+                        showError = true
+                    } else {
+                        val inc = (initialIncome ?: Income(title = "", amount = 0.0, category = "")).copy(
+                            title = title.trim(),
+                            amount = finalAmount,
+                            isRecurring = if (isOverride) false else isRecurring,
+                            specificYear = if (!isRecurring || isOverride) parsedYear else null,
+                            specificMonth = if (!isRecurring || isOverride) specificMonth else null,
+                            category = category,
+                            notes = notes.trim(),
+                            isActive = isActive,
+                            overriddenIncomeId = initialIncome?.overriddenIncomeId,
+                            isPflegegeld = false,
+                            sender = "",
+                            pflegegrad = null,
+                            pflegegeldBaseAmount = 0.0,
+                            pflegehilfsmittelAmount = 0.0,
+                            percentageShare = 100.0,
+                            carePayersJson = ""
+                        )
+                        onSave(inc)
+                    }
                 }
             }) {
                 Text("Speichern")

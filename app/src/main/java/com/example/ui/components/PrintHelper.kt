@@ -203,7 +203,7 @@ object PrintHelper {
                 <h2>1b. Pflegegeld<sup>1</sup></h2>
                 <table>
                     <thead>
-                        <tr><th>Begünstigter / Bezeichnung</th><th>Überweiser / Pflegekasse</th><th>Anteil (%) / Pflege</th><th class="amount-col">Auszahlungsbetrag</th></tr>
+                        <tr><th>Begünstigter / Bezeichnung</th><th>Einstufung & Hilfsmittel (Basis)</th><th>Aufteilung Pflegegeldzahler</th><th class="amount-col">Auszahlungsbetrag</th></tr>
                     </thead>
                     <tbody>
         """.trimIndent())
@@ -211,20 +211,42 @@ object PrintHelper {
             htmlBuilder.append("""<tr><td colspan="4" style="text-align:center; color:#94a3b8;">Kein Pflegegeld für diesen Monat erfasst.</td></tr>""")
         } else {
             for (inc in pflegegeldIncomes) {
-                val pct = if (inc.percentageShare % 1.0 == 0.0) inc.percentageShare.toInt().toString() else inc.percentageShare.toString()
-                val gradInfo = if (inc.pflegegrad != null) "PG ${inc.pflegegrad}" else "Pflege"
-                val pgDetail = if (inc.pflegegeldBaseAmount > 0 || inc.pflegehilfsmittelAmount > 0) {
-                    " [PG-Basis: ${fmt.format(inc.pflegegeldBaseAmount)}, Hilfsmittel: ${fmt.format(inc.pflegehilfsmittelAmount)}]"
-                } else ""
-                val detail = "$pct% von ${fmt.format(inc.calculatedCareTotalBase)} ($gradInfo)$pgDetail"
+                val payers = inc.getCarePayers()
+                
+                val gradInfo = if (inc.pflegegrad != null) "Pflegegrad ${inc.pflegegrad}" else "Pflege"
+                val baseDetail = if (inc.pflegegeldBaseAmount > 0 || inc.pflegehilfsmittelAmount > 0) {
+                    "$gradInfo (${fmt.format(inc.pflegegeldBaseAmount)}) + Hilfsmittel (${fmt.format(inc.pflegehilfsmittelAmount)})<br><strong>Gesamtbasis: ${fmt.format(inc.calculatedCareTotalBase)}</strong>"
+                } else {
+                    "Gesamtbasis: ${fmt.format(inc.calculatedCareTotalBase)}"
+                }
+
                 htmlBuilder.append("""
                     <tr>
-                        <td>${inc.title}</td>
-                        <td>${if (inc.sender.isNotBlank()) inc.sender else "Keine Angabe"}</td>
-                        <td>${detail}</td>
+                        <td><strong>${inc.title}</strong></td>
+                        <td colspan="2" style="font-style: italic; color: #555;">$baseDetail</td>
                         <td class="amount-col positive">+${fmt.format(inc.amount)}</td>
                     </tr>
                 """.trimIndent())
+                
+                if (payers.isNotEmpty()) {
+                    for (p in payers) {
+                        val pPct = if (p.percentage % 1.0 == 0.0) p.percentage.toInt().toString() else p.percentage.toString()
+                        val sharePflegegeld = inc.pflegegeldBaseAmount * (p.percentage / 100.0)
+                        val shareAid = inc.pflegehilfsmittelAmount * (p.percentage / 100.0)
+                        
+                        htmlBuilder.append("""
+                            <tr>
+                                <td style="padding-left: 20px;">↳ Zahler: ${p.name}</td>
+                                <td>${fmt.format(sharePflegegeld)}</td>
+                                <td>${fmt.format(shareAid)}</td>
+                                <td>${pPct}%</td>
+                                <td class="amount-col">${fmt.format(p.calculatedAmount)}</td>
+                            </tr>
+                        """.trimIndent())
+                    }
+                } else if (inc.sender.isNotBlank()) {
+                    htmlBuilder.append("""<tr><td colspan="4" style="padding-left: 20px;">Zahler: ${inc.sender}</td></tr>""")
+                }
             }
         }
         htmlBuilder.append("""

@@ -110,6 +110,7 @@ object BackupHelper {
             obj.put("pflegegeldBaseAmount", inc.pflegegeldBaseAmount)
             obj.put("pflegehilfsmittelAmount", inc.pflegehilfsmittelAmount)
             obj.put("percentageShare", inc.percentageShare)
+            obj.put("carePayersJson", inc.carePayersJson)
             incomeArray.put(obj)
         }
         root.put("incomes", incomeArray)
@@ -237,7 +238,8 @@ object BackupHelper {
                         pflegegrad = if (obj.isNull("pflegegrad")) null else obj.optInt("pflegegrad"),
                         pflegegeldBaseAmount = obj.optDouble("pflegegeldBaseAmount", 0.0),
                         pflegehilfsmittelAmount = obj.optDouble("pflegehilfsmittelAmount", 0.0),
-                        percentageShare = obj.optDouble("percentageShare", 100.0)
+                        percentageShare = obj.optDouble("percentageShare", 100.0),
+                        carePayersJson = obj.optString("carePayersJson", "")
                     )
                 )
             }

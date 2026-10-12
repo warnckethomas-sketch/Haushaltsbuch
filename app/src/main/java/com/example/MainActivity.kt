@@ -396,10 +396,10 @@ class MainActivity : ComponentActivity() {
                                     Button(
                                         onClick = {
                                             showExitDialog = false
-                                            activity?.finish()
+                                            activity?.finishAndRemoveTask()
                                         },
                                         colors = ButtonDefaults.buttonColors(
-                                            containerColor = MaterialTheme.colorScheme.error
+                                            containerColor = MaterialTheme.colorScheme.primary
                                         )
                                     ) {
                                         Text("Beenden")

@@ -236,13 +236,107 @@ fun PrintPreviewScreen(
                         Text("Kein Pflegegeld für diesen Monat erfasst.", style = MaterialTheme.typography.bodySmall, color = Color.Gray, modifier = Modifier.padding(vertical = 2.dp))
                     } else {
                         pflegegeldIncomes.forEachIndexed { index, inc ->
-                            val pct = if (inc.percentageShare % 1.0 == 0.0) inc.percentageShare.toInt().toString() else inc.percentageShare.toString()
-                            val senderText = if (inc.sender.isNotBlank()) "Überweiser: ${inc.sender}" else "Pflegegeld"
-                            val pgDetail = if (inc.pflegegeldBaseAmount > 0 || inc.pflegehilfsmittelAmount > 0) {
-                                " [PG-Basis: ${fmt.format(inc.pflegegeldBaseAmount)}, Hilfsmittel: ${fmt.format(inc.pflegehilfsmittelAmount)}]"
-                            } else ""
-                            val subtitle = "$senderText ($pct% von ${fmt.format(inc.calculatedCareTotalBase)})$pgDetail"
-                            PrintTableRow(inc.title, subtitle, "+${fmt.format(inc.amount)}", MaterialTheme.colorScheme.tertiary, isEven = index % 2 == 1)
+                            val payers = inc.getCarePayers()
+                            val gradText = if (inc.pflegegrad != null) "PG ${inc.pflegegrad}" else "Pflege"
+                            val aidsText = if (inc.pflegehilfsmittelAmount > 0) " + Hilfsmittel ${fmt.format(inc.pflegehilfsmittelAmount)}" else ""
+                            val careBase = inc.calculatedCareTotalBase
+                            val subtitle = "$gradText (${fmt.format(inc.pflegegeldBaseAmount)}$aidsText = Gesamtsumme ${fmt.format(careBase)})"
+
+                            PrintTableRow(inc.title, "", "+${fmt.format(inc.amount)}", MaterialTheme.colorScheme.tertiary, isEven = index % 2 == 1)
+
+                            // Basis info row
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(if (index % 2 == 1) Color(0x22E0F2FE) else Color(0x0A000000))
+                                    .padding(start = 22.dp, end = 7.dp, top = 2.5.dp, bottom = 3.dp),
+                                horizontalArrangement = Arrangement.Start
+                            ) {
+                                Text(
+                                    text = subtitle,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontSize = 12.sp,
+                                    color = Color.Gray,
+                                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                                )
+                            }
+                            
+                            // Payers rows
+                            payers.forEach { payer ->
+                                val sharePflegegeld = inc.pflegegeldBaseAmount * (payer.percentage / 100.0)
+                                val shareAid = inc.pflegehilfsmittelAmount * (payer.percentage / 100.0)
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(if (index % 2 == 1) Color(0x22E0F2FE) else Color(0x0A000000))
+                                        .padding(start = 30.dp, end = 7.dp, top = 2.dp, bottom = 2.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("↳ Zahler: ${payer.name}", style = MaterialTheme.typography.bodySmall, fontSize = 11.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                                    Text("${fmt.format(sharePflegegeld)} | ${fmt.format(shareAid)} | ${payer.percentage.toInt()}% | ${fmt.format(payer.calculatedAmount)}", style = MaterialTheme.typography.bodySmall, fontSize = 11.sp)
+                                }
+                            }
+                            
+                            // Visual Spacer
+                            Spacer(modifier = Modifier
+                                .fillMaxWidth()
+                                .height(4.dp)
+                                .background(if (index % 2 == 1) Color(0x22E0F2FE) else Color(0x0A000000)))
+
+                            if (payers.isNotEmpty()) {
+                                payers.forEach { p ->
+                                    val pPct = if (p.percentage % 1.0 == 0.0) p.percentage.toInt().toString() else p.percentage.toString()
+                                    val sharePflegegeld = inc.pflegegeldBaseAmount * (p.percentage / 100.0)
+                                    val shareHilfsmittel = inc.pflegehilfsmittelAmount * (p.percentage / 100.0)
+
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(if (index % 2 == 1) Color(0x22E0F2FE) else Color(0x0A000000))
+                                            .padding(start = 22.dp, end = 7.dp, top = 2.5.dp, bottom = 3.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "↳ Zahler: ${p.name}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontSize = 11.5.sp,
+                                            color = Color.DarkGray,
+                                            modifier = Modifier.weight(1.3f)
+                                        )
+                                        Text(
+                                            text = fmt.format(sharePflegegeld),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontSize = 11.5.sp,
+                                            textAlign = TextAlign.End,
+                                            modifier = Modifier.weight(0.6f)
+                                        )
+                                        Text(
+                                            text = fmt.format(shareHilfsmittel),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontSize = 11.5.sp,
+                                            textAlign = TextAlign.End,
+                                            modifier = Modifier.weight(0.6f)
+                                        )
+                                        Text(
+                                            text = "$pPct %",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontSize = 11.5.sp,
+                                            textAlign = TextAlign.End,
+                                            modifier = Modifier.weight(0.5f)
+                                        )
+                                        Text(
+                                            text = "+${fmt.format(p.calculatedAmount)}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.tertiary,
+                                            textAlign = TextAlign.End,
+                                            modifier = Modifier.weight(0.7f)
+                                        )
+                                    }
+                                }
+                                HorizontalDivider(color = Color(0xFFE2E8F0), thickness = 0.5.dp)
+                            }
                         }
                     }
                     PrintTableTotalRow("Gesamt Pflegegeld (separat)", "+${fmt.format(totalPflegegeld)}", MaterialTheme.colorScheme.tertiary)

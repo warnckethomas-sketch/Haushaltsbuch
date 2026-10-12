@@ -447,12 +447,54 @@ fun IncomeCard(
                         overflow = TextOverflow.Ellipsis
                     )
                     if (income.isCareAllowanceItem) {
-                        Column(modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)) {
-                            if (income.sender.isNotBlank()) {
+                        Column(modifier = Modifier.padding(top = 4.dp, bottom = 2.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            val careBase = income.calculatedCareTotalBase
+                            val gradText = if (income.pflegegrad != null) "Pflegegrad ${income.pflegegrad}" else "Einstufung"
+                            val aidsText = if (income.pflegehilfsmittelAmount > 0) " + Hilfsmittel ${fmt.format(income.pflegehilfsmittelAmount)}" else ""
+                            
+                            // 1. Einstufung & monatliche Basis
+                            Text(
+                                text = "Einstufung: $gradText (${fmt.format(income.pflegegeldBaseAmount)}$aidsText = Gesamtsumme ${fmt.format(careBase)})",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.tertiary
+                            )
+
+                            // 2. Unterbereich: Zahler
+                            val payers = income.getCarePayers()
+                            if (payers.isNotEmpty()) {
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    payers.forEach { payer ->
+                                        val pPct = if (payer.percentage % 1.0 == 0.0) payer.percentage.toInt().toString() else payer.percentage.toString()
+                                        Surface(
+                                            color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f),
+                                            shape = RoundedCornerShape(6.dp)
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.AccountBalance,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                                    modifier = Modifier.size(13.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = "${payer.name}: $pPct % ➔ ${fmt.format(payer.calculatedAmount)}",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            } else if (income.sender.isNotBlank()) {
                                 Surface(
                                     color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f),
-                                    shape = RoundedCornerShape(6.dp),
-                                    modifier = Modifier.padding(bottom = 2.dp)
+                                    shape = RoundedCornerShape(6.dp)
                                 ) {
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
@@ -466,7 +508,7 @@ fun IncomeCard(
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Text(
-                                            text = "Überweiser: ${income.sender}",
+                                            text = "Zahler: ${income.sender}",
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onTertiaryContainer
@@ -474,16 +516,6 @@ fun IncomeCard(
                                     }
                                 }
                             }
-                            val careBase = income.calculatedCareTotalBase
-                            val pctDisplay = if (income.percentageShare % 1.0 == 0.0) income.percentageShare.toInt().toString() else income.percentageShare.toString()
-                            val gradText = if (income.pflegegrad != null) "PG ${income.pflegegrad}" else "Gesamtpflege"
-                            val subDetails = if (income.pflegehilfsmittelAmount > 0) "+ ${fmt.format(income.pflegehilfsmittelAmount)} Hilfsmittel" else ""
-                            Text(
-                                text = "$pctDisplay % Anteil von ${fmt.format(careBase)} ($gradText $subDetails)".trim(),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.tertiary
-                            )
                         }
                     } else if (income.sender.isNotBlank()) {
                         Surface(

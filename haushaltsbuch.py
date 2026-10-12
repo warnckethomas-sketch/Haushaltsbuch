@@ -481,9 +481,14 @@ class FinanceDB:
                 ergebnis REAL NOT NULL DEFAULT 0.0,
                 gueltigkeit TEXT DEFAULT '',
                 rhythmus TEXT DEFAULT 'Monatlich',
-                is_active INTEGER NOT NULL DEFAULT 1
+                is_active INTEGER NOT NULL DEFAULT 1,
+                zahler_json TEXT DEFAULT ''
             )
             """)
+            cursor.execute("PRAGMA table_info(pflegegeld)")
+            pf_cols = [r[1] for r in cursor.fetchall()]
+            if pf_cols and "zahler_json" not in pf_cols:
+                cursor.execute("ALTER TABLE pflegegeld ADD COLUMN zahler_json TEXT DEFAULT ''")
 
             # Settings
             cursor.execute("""
@@ -685,29 +690,43 @@ class FinanceDB:
     def get_pflegegeld_list(self):
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT id, beguenstigter, ueberweiser, pflegegrad, gesamtpflegegeld, pflegehilfsmittel, anteil_prozent, ergebnis, gueltigkeit, rhythmus, is_active FROM pflegegeld ORDER BY id ASC")
+            cursor.execute("PRAGMA table_info(pflegegeld)")
+            cols = [r[1] for r in cursor.fetchall()]
+            if "zahler_json" in cols:
+                cursor.execute("SELECT id, beguenstigter, ueberweiser, pflegegrad, gesamtpflegegeld, pflegehilfsmittel, anteil_prozent, ergebnis, gueltigkeit, rhythmus, is_active, zahler_json FROM pflegegeld ORDER BY id ASC")
+            else:
+                cursor.execute("SELECT id, beguenstigter, ueberweiser, pflegegrad, gesamtpflegegeld, pflegehilfsmittel, anteil_prozent, ergebnis, gueltigkeit, rhythmus, is_active, '' AS zahler_json FROM pflegegeld ORDER BY id ASC")
             return cursor.fetchall()
 
     def get_pflegegeld_by_id(self, item_id):
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT id, beguenstigter, ueberweiser, pflegegrad, gesamtpflegegeld, pflegehilfsmittel, anteil_prozent, ergebnis, gueltigkeit, rhythmus, is_active FROM pflegegeld WHERE id=?", (item_id,))
+            cursor.execute("PRAGMA table_info(pflegegeld)")
+            cols = [r[1] for r in cursor.fetchall()]
+            if "zahler_json" in cols:
+                cursor.execute("SELECT id, beguenstigter, ueberweiser, pflegegrad, gesamtpflegegeld, pflegehilfsmittel, anteil_prozent, ergebnis, gueltigkeit, rhythmus, is_active, zahler_json FROM pflegegeld WHERE id=?", (item_id,))
+            else:
+                cursor.execute("SELECT id, beguenstigter, ueberweiser, pflegegrad, gesamtpflegegeld, pflegehilfsmittel, anteil_prozent, ergebnis, gueltigkeit, rhythmus, is_active, '' AS zahler_json FROM pflegegeld WHERE id=?", (item_id,))
             return cursor.fetchone()
 
-    def save_pflegegeld(self, item_id, beguenstigter, ueberweiser, pflegegrad, gesamtpflegegeld, pflegehilfsmittel, anteil_prozent, ergebnis, gueltigkeit, rhythmus, is_active=1):
+    def save_pflegegeld(self, item_id, beguenstigter, ueberweiser, pflegegrad, gesamtpflegegeld, pflegehilfsmittel, anteil_prozent, ergebnis, gueltigkeit, rhythmus, is_active=1, zahler_json=""):
         with self.get_connection() as conn:
             cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(pflegegeld)")
+            cols = [r[1] for r in cursor.fetchall()]
+            if "zahler_json" not in cols:
+                cursor.execute("ALTER TABLE pflegegeld ADD COLUMN zahler_json TEXT DEFAULT ''")
             if item_id:
                 cursor.execute("""
                     UPDATE pflegegeld
-                    SET beguenstigter=?, ueberweiser=?, pflegegrad=?, gesamtpflegegeld=?, pflegehilfsmittel=?, anteil_prozent=?, ergebnis=?, gueltigkeit=?, rhythmus=?, is_active=?
+                    SET beguenstigter=?, ueberweiser=?, pflegegrad=?, gesamtpflegegeld=?, pflegehilfsmittel=?, anteil_prozent=?, ergebnis=?, gueltigkeit=?, rhythmus=?, is_active=?, zahler_json=?
                     WHERE id=?
-                """, (beguenstigter, ueberweiser, pflegegrad, gesamtpflegegeld, pflegehilfsmittel, anteil_prozent, ergebnis, gueltigkeit, rhythmus, is_active, item_id))
+                """, (beguenstigter, ueberweiser, pflegegrad, gesamtpflegegeld, pflegehilfsmittel, anteil_prozent, ergebnis, gueltigkeit, rhythmus, is_active, zahler_json, item_id))
             else:
                 cursor.execute("""
-                    INSERT INTO pflegegeld (beguenstigter, ueberweiser, pflegegrad, gesamtpflegegeld, pflegehilfsmittel, anteil_prozent, ergebnis, gueltigkeit, rhythmus, is_active)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (beguenstigter, ueberweiser, pflegegrad, gesamtpflegegeld, pflegehilfsmittel, anteil_prozent, ergebnis, gueltigkeit, rhythmus, is_active))
+                    INSERT INTO pflegegeld (beguenstigter, ueberweiser, pflegegrad, gesamtpflegegeld, pflegehilfsmittel, anteil_prozent, ergebnis, gueltigkeit, rhythmus, is_active, zahler_json)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (beguenstigter, ueberweiser, pflegegrad, gesamtpflegegeld, pflegehilfsmittel, anteil_prozent, ergebnis, gueltigkeit, rhythmus, is_active, zahler_json))
             conn.commit()
 
     def delete_pflegegeld(self, item_id):
@@ -991,13 +1010,19 @@ class FinanceDB:
             data["invoices"] = invoices
 
             # Pflegegeld
-            cursor.execute("SELECT id, beguenstigter, ueberweiser, pflegegrad, gesamtpflegegeld, pflegehilfsmittel, anteil_prozent, ergebnis, gueltigkeit, rhythmus, is_active FROM pflegegeld")
+            cursor.execute("PRAGMA table_info(pflegegeld)")
+            pf_cols = [r[1] for r in cursor.fetchall()]
+            if "zahler_json" in pf_cols:
+                cursor.execute("SELECT id, beguenstigter, ueberweiser, pflegegrad, gesamtpflegegeld, pflegehilfsmittel, anteil_prozent, ergebnis, gueltigkeit, rhythmus, is_active, zahler_json FROM pflegegeld")
+            else:
+                cursor.execute("SELECT id, beguenstigter, ueberweiser, pflegegrad, gesamtpflegegeld, pflegehilfsmittel, anteil_prozent, ergebnis, gueltigkeit, rhythmus, is_active, '' AS zahler_json FROM pflegegeld")
             pflegegeld = []
             for r in cursor.fetchall():
                 pflegegeld.append({
                     "id": r[0], "beguenstigter": r[1], "ueberweiser": r[2], "pflegegrad": r[3],
                     "gesamtpflegegeld": r[4], "pflegehilfsmittel": r[5], "anteil_prozent": r[6],
-                    "ergebnis": r[7], "gueltigkeit": r[8], "rhythmus": r[9], "is_active": r[10]
+                    "ergebnis": r[7], "gueltigkeit": r[8], "rhythmus": r[9], "is_active": r[10],
+                    "zahler_json": r[11] if len(r) > 11 else ""
                 })
             data["pflegegeld"] = pflegegeld
             
@@ -1192,21 +1217,41 @@ class FinanceDB:
             if pf_list:
                 cursor.execute("DELETE FROM pflegegeld")
                 for item in pf_list:
-                    cursor.execute("""
-                        INSERT INTO pflegegeld (beguenstigter, ueberweiser, pflegegrad, gesamtpflegegeld, pflegehilfsmittel, anteil_prozent, ergebnis, gueltigkeit, rhythmus, is_active)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        str(item.get("beguenstigter", "")),
-                        str(item.get("ueberweiser", "")),
-                        str(item.get("pflegegrad", "Pflegegrad 1")),
-                        float(item.get("gesamtpflegegeld", 0.0)),
-                        float(item.get("pflegehilfsmittel", 0.0)),
-                        float(item.get("anteil_prozent", 100.0)),
-                        float(item.get("ergebnis", 0.0)),
-                        str(item.get("gueltigkeit", "")),
-                        str(item.get("rhythmus", "Monatlich")),
-                        int(item.get("is_active", 1))
-                    ))
+                    cursor.execute("PRAGMA table_info(pflegegeld)")
+                    pf_cols = [r[1] for r in cursor.fetchall()]
+                    if "zahler_json" in pf_cols:
+                        cursor.execute("""
+                            INSERT INTO pflegegeld (beguenstigter, ueberweiser, pflegegrad, gesamtpflegegeld, pflegehilfsmittel, anteil_prozent, ergebnis, gueltigkeit, rhythmus, is_active, zahler_json)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            str(item.get("beguenstigter", "")),
+                            str(item.get("ueberweiser", "")),
+                            str(item.get("pflegegrad", "Pflegegrad 1")),
+                            float(item.get("gesamtpflegegeld", 0.0)),
+                            float(item.get("pflegehilfsmittel", 0.0)),
+                            float(item.get("anteil_prozent", 100.0)),
+                            float(item.get("ergebnis", 0.0)),
+                            str(item.get("gueltigkeit", "")),
+                            str(item.get("rhythmus", "Monatlich")),
+                            int(item.get("is_active", 1)),
+                            str(item.get("zahler_json", ""))
+                        ))
+                    else:
+                        cursor.execute("""
+                            INSERT INTO pflegegeld (beguenstigter, ueberweiser, pflegegrad, gesamtpflegegeld, pflegehilfsmittel, anteil_prozent, ergebnis, gueltigkeit, rhythmus, is_active)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            str(item.get("beguenstigter", "")),
+                            str(item.get("ueberweiser", "")),
+                            str(item.get("pflegegrad", "Pflegegrad 1")),
+                            float(item.get("gesamtpflegegeld", 0.0)),
+                            float(item.get("pflegehilfsmittel", 0.0)),
+                            float(item.get("anteil_prozent", 100.0)),
+                            float(item.get("ergebnis", 0.0)),
+                            str(item.get("gueltigkeit", "")),
+                            str(item.get("rhythmus", "Monatlich")),
+                            int(item.get("is_active", 1))
+                        ))
 
             conn.commit()
 
@@ -1577,6 +1622,9 @@ class DIN5008PDFGenerator:
             amt = safe_float(r[2], 0.0)
             if is_act and check_recurring_due(r[4], r[5], s_m, s_y, e_m, e_y, self.month_int, self.year, due_m):
                 freq_str = get_recurring_rhythm_display(r)
+                if e_y > 0 and e_m > 0:
+                    yy = e_y % 100
+                    freq_str += f" (bis {e_m:02d}-{yy:02d})"
                 rec_rows.append([r[1], r[3], freq_str, f"-{fmt_de(amt)}", '[ ]'])
                 tot_rec += amt
         self._draw_table('3. WIEDERKEHRENDE AUSGABEN', ['Bezeichnung', 'Kategorie', 'Rhythmus', 'Betrag (€)', 'Gebucht'], rec_rows, [160, 115, 75, 70.72, 47], 'Summe Wiederkehrend:', tot_rec, is_expense=True)
@@ -1596,7 +1644,7 @@ class DIN5008PDFGenerator:
             pf_rows = []
             tot_pf = 0.0
             for p in active_pf:
-                label = f"{p[1]} ({p[2]})" if p[2] else p[1]
+                label = p[1]
                 p_grad = str(p[3]) if len(p) > 3 else ""
                 p_gesamt = fmt_de(p[4])
                 p_hilfs = fmt_de(p[5])
@@ -1605,6 +1653,32 @@ class DIN5008PDFGenerator:
                 erg = safe_float(p[7], 0.0)
                 pf_rows.append([label, p_grad, p_gesamt, p_hilfs, p_anteil, p_rhythm, fmt_de(erg)])
                 tot_pf += erg
+
+                # Aufteilung der einzelnen Pflegegeldzahler
+                z_json = p[11] if len(p) > 11 else ""
+                payers_list = []
+                if z_json:
+                    try:
+                        payers_list = json.loads(z_json)
+                    except Exception:
+                        payers_list = []
+                if payers_list and len(payers_list) > 1:
+                    base_pflegegeld = safe_float(p[4], 0.0)
+                    base_hilfsmittel = safe_float(p[5], 0.0)
+                    for pl in payers_list:
+                        pl_name = pl.get("name", "")
+                        pl_pct_val = safe_float(pl.get('prozent', 0))
+                        
+                        share_pflegegeld = base_pflegegeld * (pl_pct_val / 100.0)
+                        share_hilfsmittel = base_hilfsmittel * (pl_pct_val / 100.0)
+                        
+                        pl_amt = safe_float(pl.get('betrag', 0.0))
+                        
+                        # Add Zahler row (columns: Begünstigter, Pflegegrad, Gesamt, Hilfsmittel, Anteil, Rhythmus, Auszahlung)
+                        # We map Zahler row to match the headers: 
+                        # Col 0: Name, Col 1: EMPTY, Col 2: share_pflegegeld, Col 3: share_hilfsmittel, Col 4: percentage, Col 5: EMPTY, Col 6: amount
+                        pf_rows.append([f"  ↳ Zahler: {pl_name}", "", fmt_de(share_pflegegeld), fmt_de(share_hilfsmittel), f"{pl_pct_val:g} %".replace(".", ","), "", fmt_de(pl_amt)])
+
             self._draw_table('GESONDERTER BEREICH - PFLEGEGELD (NICHT IN DEN EINNAHMEN ENTHALTEN)',
                              ['Begünstigter / Überweiser', 'Pflegegrad', 'Gesamt (€)', 'Hilfsmittel (€)', 'Anteil (%)', 'Rhythmus', 'Auszahlung (€)'],
                              pf_rows, [120, 55, 60, 60, 45, 55, 72.72], 'Summe Pflegegeld (gesondert):', tot_pf, is_expense=False)
@@ -4004,7 +4078,8 @@ class HaushaltsbuchApp(tk.Tk):
                 anteil=rec[6],
                 gueltigkeit=rec[8],
                 rhythmus=rec[9],
-                active=bool(rec[10])
+                active=bool(rec[10]),
+                zahler_json=rec[11] if len(rec) > 11 else ""
             )
 
     def delete_pflegegeld(self):
@@ -4022,13 +4097,14 @@ class HaushaltsbuchApp(tk.Tk):
         item_id=None,
         beguenstigter="",
         ueberweiser="",
-        pflegegrad="Pflegegrad 1",
-        gesamt=0.0,
-        hilfsmittel=0.0,
+        pflegegrad="Pflegegrad 3",
+        gesamt=None,
+        hilfsmittel=None,
         anteil=100.0,
         gueltigkeit="",
         rhythmus="Monatlich",
-        active=True
+        active=True,
+        zahler_json=""
     ):
         dlg = tk.Toplevel(self)
         dlg.title("Pflegegeld bearbeiten" if item_id else "Pflegegeld hinzufügen")
@@ -4042,72 +4118,73 @@ class HaushaltsbuchApp(tk.Tk):
             f,
             text="🏥 Pflegegeld bearbeiten" if item_id else "🏥 Pflegegeld hinzufügen",
             font=("Helvetica", 12, "bold")
-        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 12))
+        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 10))
 
-        # 1. Begünstigter
-        ttk.Label(f, text="Begünstigter:").grid(row=1, column=0, sticky="w", pady=4)
-        ent_beguenstigter = ttk.Entry(f, width=32)
+        # 1. Begünstigter / Bezeichnung
+        ttk.Label(f, text="Begünstigter / Bezeichnung:").grid(row=1, column=0, sticky="w", pady=4)
+        ent_beguenstigter = ttk.Entry(f, width=36)
         ent_beguenstigter.insert(0, beguenstigter)
         ent_beguenstigter.grid(row=1, column=1, pady=4, sticky="w")
 
-        # 2. Überweiser
-        ttk.Label(f, text="Überweiser:").grid(row=2, column=0, sticky="w", pady=4)
-        ent_ueberweiser = ttk.Entry(f, width=32)
-        ent_ueberweiser.insert(0, ueberweiser)
-        ent_ueberweiser.grid(row=2, column=1, pady=4, sticky="w")
+        # 2. Einstufung & monatliche Erfassung
+        pg_defaults = {
+            "Pflegegrad 1": 0.0,
+            "Pflegegrad 2": 332.0,
+            "Pflegegrad 3": 572.0,
+            "Pflegegrad 4": 765.0,
+            "Pflegegrad 5": 947.0
+        }
 
-        # 3. Auswahl Pflegegrad / Stufe
-        ttk.Label(f, text="Pflegegrad / Stufe:").grid(row=3, column=0, sticky="w", pady=4)
+        ttk.Label(f, text="Pflegegrad / Einstufung:").grid(row=2, column=0, sticky="w", pady=4)
         p_grades = ["Pflegegrad 1", "Pflegegrad 2", "Pflegegrad 3", "Pflegegrad 4", "Pflegegrad 5"]
-        cmb_pflegegrad = ttk.Combobox(f, values=p_grades, width=30, state="readonly")
-        cmb_pflegegrad.set(pflegegrad if pflegegrad in p_grades else "Pflegegrad 1")
-        cmb_pflegegrad.grid(row=3, column=1, pady=4, sticky="w")
+        cmb_pflegegrad = ttk.Combobox(f, values=p_grades, width=34, state="readonly")
+        cmb_pflegegrad.set(pflegegrad if pflegegrad in p_grades else "Pflegegrad 3")
+        cmb_pflegegrad.grid(row=2, column=1, pady=4, sticky="w")
 
-        # 4. Gesamtpflegegeld daneben Pflegehilfsmittel
-        ttk.Label(f, text="Gesamtpflegegeld (€):").grid(row=4, column=0, sticky="w", pady=4)
+        # 3. Beträge: Pflegegeldhöhe daneben Hilfsmittel Betrag
+        ttk.Label(f, text="Pflegegeldhöhe (€):").grid(row=3, column=0, sticky="w", pady=4)
         amt_f = ttk.Frame(f)
-        amt_f.grid(row=4, column=1, sticky="w", pady=4)
+        amt_f.grid(row=3, column=1, sticky="w", pady=4)
 
-        ent_gesamt = ttk.Entry(amt_f, width=11)
-        if gesamt is not None and gesamt != "":
-            try:
-                ent_gesamt.insert(0, f"{float(gesamt):.2f}".replace(".", ","))
-            except (ValueError, TypeError):
-                ent_gesamt.insert(0, str(gesamt))
+        ent_gesamt = ttk.Entry(amt_f, width=12)
+        initial_g = gesamt if gesamt is not None and gesamt != "" else (pg_defaults.get(cmb_pflegegrad.get(), 572.0) if not item_id else 0.0)
+        try:
+            ent_gesamt.insert(0, f"{float(initial_g):.2f}".replace(".", ","))
+        except (ValueError, TypeError):
+            ent_gesamt.insert(0, str(initial_g))
         ent_gesamt.pack(side="left", padx=(0, 6))
 
-        ttk.Label(amt_f, text="Pflegehilfsmittel (€):").pack(side="left", padx=(4, 4))
-        ent_hilfsmittel = ttk.Entry(amt_f, width=11)
-        if hilfsmittel is not None and hilfsmittel != "":
-            try:
-                ent_hilfsmittel.insert(0, f"{float(hilfsmittel):.2f}".replace(".", ","))
-            except (ValueError, TypeError):
-                ent_hilfsmittel.insert(0, str(hilfsmittel))
+        ttk.Label(amt_f, text="Hilfsmittel Betrag (€):").pack(side="left", padx=(4, 4))
+        ent_hilfsmittel = ttk.Entry(amt_f, width=12)
+        initial_h = hilfsmittel if hilfsmittel is not None and hilfsmittel != "" else (42.0 if not item_id else 0.0)
+        try:
+            ent_hilfsmittel.insert(0, f"{float(initial_h):.2f}".replace(".", ","))
+        except (ValueError, TypeError):
+            ent_hilfsmittel.insert(0, str(initial_h))
         ent_hilfsmittel.pack(side="left")
 
-        # 5. Zusammenfassung Gesamtsumme Pflege (über Anteil des Überweisers)
-        ttk.Label(f, text="Gesamtsumme Pflege (€):").grid(row=5, column=0, sticky="w", pady=4)
-        lbl_gesamtsumme_pflege = ttk.Label(f, text="0,00 €", font=("Helvetica", 10, "bold"))
-        lbl_gesamtsumme_pflege.grid(row=5, column=1, sticky="w", pady=4)
+        # Gesamtsumme Pflege (Pflegegeldhöhe + Hilfsmittel)
+        ttk.Label(f, text="Gesamtsumme Pflege (€):").grid(row=4, column=0, sticky="w", pady=4)
+        lbl_gesamtsumme_pflege = ttk.Label(f, text="0,00 €", font=("Helvetica", 10, "bold"), foreground="#1565c0")
+        lbl_gesamtsumme_pflege.grid(row=4, column=1, sticky="w", pady=4)
 
-        # 6. Anteil des Überweisers in %
-        ttk.Label(f, text="Anteil des Überweisers (%):").grid(row=6, column=0, sticky="w", pady=4)
-        ent_anteil = ttk.Entry(f, width=32)
-        if anteil is not None and anteil != "":
-            try:
-                ent_anteil.insert(0, f"{float(anteil):g}".replace(".", ","))
-            except (ValueError, TypeError):
-                ent_anteil.insert(0, str(anteil))
-        else:
-            ent_anteil.insert(0, "100")
-        ent_anteil.grid(row=6, column=1, pady=4, sticky="w")
+        # 4. Unterbereich: Wer zahlt das Pflegegeld (Zahler mit Pluszeichen)
+        lf_zahler = ttk.LabelFrame(f, text=" 🏥 Wer zahlt das Pflegegeld (Zahler & Anteile) ", padding=8)
+        lf_zahler.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(8, 8))
 
-        # 7. Ergebnis (Berechnung)
-        ttk.Label(f, text="Ergebnis (Auszahlung €):").grid(row=7, column=0, sticky="w", pady=4)
-        lbl_ergebnis = ttk.Label(f, text="0,00 €", font=("Helvetica", 11, "bold"), foreground="#2e7d32")
-        lbl_ergebnis.grid(row=7, column=1, sticky="w", pady=4)
+        top_zahler_bar = ttk.Frame(lf_zahler)
+        top_zahler_bar.pack(fill="x", pady=(0, 4))
+        ttk.Label(top_zahler_bar, text="Zahler angeben (Name & Prozentsatz):", font=("Helvetica", 9, "bold")).pack(side="left")
 
-        def calc_ergebnis(*args):
+        payers_container = ttk.Frame(lf_zahler)
+        payers_container.pack(fill="x", pady=4)
+
+        lbl_zahler_summary = ttk.Label(lf_zahler, text="Summe Anteile: 100 % | Auszahlungssumme: 0,00 €", font=("Helvetica", 9, "bold"), foreground="#2e7d32")
+        lbl_zahler_summary.pack(fill="x", pady=(4, 0))
+
+        payer_rows = []
+
+        def get_care_base():
             try:
                 g_val = float(ent_gesamt.get().strip().replace(".", "").replace(",", "."))
             except (ValueError, TypeError):
@@ -4116,52 +4193,132 @@ class HaushaltsbuchApp(tk.Tk):
                 h_val = float(ent_hilfsmittel.get().strip().replace(".", "").replace(",", "."))
             except (ValueError, TypeError):
                 h_val = 0.0
+            return g_val, h_val, (g_val + h_val)
+
+        def calc_all(*args):
+            g_val, h_val, summe_pf = get_care_base()
+            lbl_gesamtsumme_pflege.config(text=f"{summe_pf:,.2f} € (Pflegegeld {g_val:,.2f} € + Hilfsmittel {h_val:,.2f} €)")
+
+            tot_pct = 0.0
+            tot_payout = 0.0
+            for row in payer_rows:
+                pct_str = row["pct_ent"].get().strip().replace(".", "").replace(",", ".")
+                try:
+                    p_val = float(pct_str)
+                except ValueError:
+                    p_val = 0.0
+                calc_val = summe_pf * (p_val / 100.0)
+                row["calc_lbl"].config(text=f"{calc_val:,.2f} €")
+                tot_pct += p_val
+                tot_payout += calc_val
+
+            pct_color = "#2e7d32" if abs(tot_pct - 100.0) < 0.01 else "#d32f2f"
+            lbl_zahler_summary.config(
+                text=f"Summe Anteile: {tot_pct:g} % | Gesamte Auszahlung aller Zahler: {tot_payout:,.2f} €",
+                foreground=pct_color
+            )
+
+        def add_payer_row(name="", pct=100.0):
+            row_frame = ttk.Frame(payers_container)
+            row_frame.pack(fill="x", pady=2)
+
+            ttk.Label(row_frame, text="Zahler:").pack(side="left", padx=(0, 2))
+            name_ent = ttk.Entry(row_frame, width=20)
+            name_ent.insert(0, name)
+            name_ent.pack(side="left", padx=(0, 6))
+
+            ttk.Label(row_frame, text="Anteil (%):").pack(side="left", padx=(0, 2))
+            pct_ent = ttk.Entry(row_frame, width=7)
+            pct_ent.insert(0, f"{pct:g}".replace(".", ","))
+            pct_ent.pack(side="left", padx=(0, 6))
+
+            ttk.Label(row_frame, text="Errechnet:").pack(side="left", padx=(0, 2))
+            calc_lbl = ttk.Label(row_frame, text="0,00 €", font=("Helvetica", 9, "bold"), foreground="#2e7d32", width=12)
+            calc_lbl.pack(side="left", padx=(0, 4))
+
+            row_data = {"frame": row_frame, "name_ent": name_ent, "pct_ent": pct_ent, "calc_lbl": calc_lbl}
+
+            def remove_this():
+                if len(payer_rows) > 1:
+                    row_frame.destroy()
+                    payer_rows.remove(row_data)
+                    calc_all()
+
+            del_btn = ttk.Button(row_frame, text="✖", width=3, command=remove_this)
+            del_btn.pack(side="left", padx=(2, 0))
+            row_data["del_btn"] = del_btn
+
+            name_ent.bind("<KeyRelease>", calc_all)
+            pct_ent.bind("<KeyRelease>", calc_all)
+
+            payer_rows.append(row_data)
+            calc_all()
+
+        btn_add_payer = ttk.Button(top_zahler_bar, text="➕ Zahler hinzufügen", command=lambda: add_payer_row(name="", pct=50.0 if payer_rows else 100.0))
+        btn_add_payer.pack(side="right")
+
+        # Parse initial payers
+        parsed_payers = []
+        if zahler_json:
             try:
-                a_val = float(ent_anteil.get().strip().replace(".", "").replace(",", "."))
-            except (ValueError, TypeError):
-                a_val = 100.0
-            
-            summe_pf = g_val + h_val
-            lbl_gesamtsumme_pflege.config(text=f"{summe_pf:,.2f} €")
+                parsed_payers = json.loads(zahler_json)
+            except Exception:
+                parsed_payers = []
 
-            res = summe_pf * (a_val / 100.0)
-            lbl_ergebnis.config(text=f"{res:,.2f} €")
-            return res
+        if parsed_payers:
+            for p in parsed_payers:
+                p_name = p.get("name", "")
+                p_pct = safe_float(p.get("prozent", p.get("percentage", 100.0)), 100.0)
+                add_payer_row(name=p_name, pct=p_pct)
+        elif ueberweiser:
+            add_payer_row(name=ueberweiser, pct=safe_float(anteil, 100.0))
+        else:
+            add_payer_row(name="", pct=100.0)
 
-        ent_gesamt.bind("<KeyRelease>", calc_ergebnis)
-        ent_hilfsmittel.bind("<KeyRelease>", calc_ergebnis)
-        ent_anteil.bind("<KeyRelease>", calc_ergebnis)
-        calc_ergebnis()
+        def on_pg_changed(event=None):
+            sel_pg = cmb_pflegegrad.get()
+            if sel_pg in pg_defaults:
+                ent_gesamt.delete(0, "end")
+                ent_gesamt.insert(0, f"{pg_defaults[sel_pg]:.2f}".replace(".", ","))
+                calc_all()
 
-        # 8. Gültigkeit
-        ttk.Label(f, text="Gültigkeit:").grid(row=8, column=0, sticky="w", pady=4)
-        ent_gueltigkeit = ttk.Entry(f, width=32)
+        cmb_pflegegrad.bind("<<ComboboxSelected>>", on_pg_changed)
+        ent_gesamt.bind("<KeyRelease>", calc_all)
+        ent_hilfsmittel.bind("<KeyRelease>", calc_all)
+        calc_all()
+
+        # 5. Gültigkeit
+        ttk.Label(f, text="Gültigkeit:").grid(row=6, column=0, sticky="w", pady=4)
+        ent_gueltigkeit = ttk.Entry(f, width=36)
         ent_gueltigkeit.insert(0, gueltigkeit)
-        ent_gueltigkeit.grid(row=8, column=1, pady=4, sticky="w")
+        ent_gueltigkeit.grid(row=6, column=1, pady=4, sticky="w")
 
-        # 9. Rhythmus
-        ttk.Label(f, text="Rhythmus:").grid(row=9, column=0, sticky="w", pady=4)
+        # 6. Rhythmus
+        ttk.Label(f, text="Rhythmus:").grid(row=7, column=0, sticky="w", pady=4)
         r_list = ["Monatlich", "Alle 2 Monate", "Vierteljährlich", "Halbjährlich", "Jährlich", "Einmalig"]
-        cmb_rhythmus = ttk.Combobox(f, values=r_list, width=30, state="readonly")
+        cmb_rhythmus = ttk.Combobox(f, values=r_list, width=34, state="readonly")
         cmb_rhythmus.set(rhythmus if rhythmus in r_list else "Monatlich")
-        cmb_rhythmus.grid(row=9, column=1, pady=4, sticky="w")
+        cmb_rhythmus.grid(row=7, column=1, pady=4, sticky="w")
 
-        # 10. Aktiv oder nicht
+        # 7. Aktiv oder nicht
         var_active = tk.BooleanVar(value=active)
         chk_active = ttk.Checkbutton(f, text="Aktiv (wird erfasst)", variable=var_active)
-        chk_active.grid(row=10, column=1, sticky="w", pady=6)
+        chk_active.grid(row=8, column=1, sticky="w", pady=4)
 
         def save():
             beg_str = ent_beguenstigter.get().strip()
-            ueb_str = ent_ueberweiser.get().strip()
             pgrad_str = cmb_pflegegrad.get().strip()
             guelt_str = ent_gueltigkeit.get().strip()
             rhythm_str = cmb_rhythmus.get().strip()
 
+            if not beg_str:
+                messagebox.showerror("Fehler", "Bitte einen Begünstigten bzw. eine Bezeichnung eingeben.")
+                return
+
             try:
                 g_val = float(ent_gesamt.get().strip().replace(".", "").replace(",", "."))
             except ValueError:
-                messagebox.showerror("Fehler", "Bitte einen gültigen Betrag für das Gesamtpflegegeld eingeben.")
+                messagebox.showerror("Fehler", "Bitte einen gültigen Betrag für die Pflegegeldhöhe eingeben.")
                 return
 
             try:
@@ -4171,40 +4328,60 @@ class HaushaltsbuchApp(tk.Tk):
                 messagebox.showerror("Fehler", "Bitte einen gültigen Betrag für Pflegehilfsmittel eingeben.")
                 return
 
-            try:
-                a_str = ent_anteil.get().strip().replace(".", "").replace(",", ".")
-                a_val = float(a_str) if a_str else 100.0
-            except ValueError:
-                messagebox.showerror("Fehler", "Bitte eine gültige Prozentzahl für den Anteil eingeben.")
+            summe_pf = g_val + h_val
+
+            payers_data = []
+            ueb_parts = []
+            tot_pct = 0.0
+            tot_payout = 0.0
+
+            for r in payer_rows:
+                p_name = r["name_ent"].get().strip()
+                p_pct_str = r["pct_ent"].get().strip().replace(".", "").replace(",", ".")
+                try:
+                    p_pct = float(p_pct_str)
+                except ValueError:
+                    p_pct = 0.0
+                p_calc = summe_pf * (p_pct / 100.0)
+                if p_name:
+                    payers_data.append({"name": p_name, "prozent": p_pct, "betrag": p_calc})
+                    ueb_parts.append(f"{p_name} ({p_pct:g}%)")
+                tot_pct += p_pct
+                tot_payout += p_calc
+
+            if not payers_data:
+                messagebox.showerror("Fehler", "Bitte mindestens einen Zahler mit Namen angeben.")
                 return
 
-            res_val = (g_val + h_val) * (a_val / 100.0)
+            combined_ueberweiser = ", ".join(ueb_parts)
+            payers_json_str = json.dumps(payers_data, ensure_ascii=False)
 
             self.db.save_pflegegeld(
                 item_id=item_id,
                 beguenstigter=beg_str,
-                ueberweiser=ueb_str,
+                ueberweiser=combined_ueberweiser,
                 pflegegrad=pgrad_str,
                 gesamtpflegegeld=g_val,
                 pflegehilfsmittel=h_val,
-                anteil_prozent=a_val,
-                ergebnis=res_val,
+                anteil_prozent=tot_pct,
+                ergebnis=tot_payout,
                 gueltigkeit=guelt_str,
                 rhythmus=rhythm_str,
-                is_active=1 if var_active.get() else 0
+                is_active=1 if var_active.get() else 0,
+                zahler_json=payers_json_str
             )
 
             self.refresh_all_views()
             dlg.destroy()
 
         btn_box = ttk.Frame(f)
-        btn_box.grid(row=11, column=0, columnspan=2, pady=(16, 0))
+        btn_box.grid(row=9, column=0, columnspan=2, pady=(14, 0))
         btn_save = ttk.Button(btn_box, text="💾 Speichern", style="Primary.TButton", command=save)
         btn_save.pack(side="left", padx=6)
         btn_cancel = ttk.Button(btn_box, text="Abbrechen", command=dlg.destroy)
         btn_cancel.pack(side="left", padx=6)
 
-        self.auto_fit_dialog(dlg, min_w=520, min_h=460)
+        self.auto_fit_dialog(dlg, min_w=620, min_h=560)
 
     def show_income_dialog(self, item_id=None, title="", amount=0.0, cat="", active=True, is_recurring=True, month=None, year=None, force_current_month=False):
         dlg = tk.Toplevel(self)

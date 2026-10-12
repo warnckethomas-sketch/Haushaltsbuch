@@ -355,15 +355,71 @@ fun MonthlyOverviewScreen(
                         if (pflegegeldActiveIncomes.isEmpty()) {
                             Text("Kein Pflegegeld für diesen Monat erfasst.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
                         } else {
+                            val payerSubtotals = remember(pflegegeldActiveIncomes) {
+                                val map = linkedMapOf<String, Double>()
+                                pflegegeldActiveIncomes.forEach { inc ->
+                                    val payers = inc.getCarePayers()
+                                    if (payers.isNotEmpty()) {
+                                        payers.forEach { p ->
+                                            val pName = p.name.ifBlank { "Unbenannter Zahler" }
+                                            map[pName] = (map[pName] ?: 0.0) + p.calculatedAmount
+                                        }
+                                    } else if (inc.sender.isNotBlank()) {
+                                        map[inc.sender] = (map[inc.sender] ?: 0.0) + inc.amount
+                                    }
+                                }
+                                map
+                            }
+
                             pflegegeldActiveIncomes.forEach { inc ->
-                                val pct = if (inc.percentageShare % 1.0 == 0.0) inc.percentageShare.toInt().toString() else inc.percentageShare.toString()
-                                val senderText = if (inc.sender.isNotBlank()) "Überweiser: ${inc.sender}" else "Pflegegeld"
+                                val payers = inc.getCarePayers()
+                                val payersSummary = if (payers.isNotEmpty()) {
+                                    payers.joinToString(" • ") { p ->
+                                        val pPct = if (p.percentage % 1.0 == 0.0) p.percentage.toInt().toString() else p.percentage.toString()
+                                        "${p.name} ($pPct%: ${fmt.format(p.calculatedAmount)})"
+                                    }
+                                } else if (inc.sender.isNotBlank()) {
+                                    "Zahler: ${inc.sender}"
+                                } else "Pflegegeld"
+
                                 OverviewItemRow(
                                     title = inc.title,
-                                    subtitle = "$senderText ($pct% Anteil von ${fmt.format(inc.calculatedCareTotalBase)})",
+                                    subtitle = "$payersSummary [Basis: ${fmt.format(inc.calculatedCareTotalBase)}]",
                                     amountText = "+${fmt.format(inc.amount)}",
                                     color = MaterialTheme.colorScheme.tertiary
                                 )
+                            }
+
+                            if (payerSubtotals.isNotEmpty()) {
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                                Text(
+                                    text = "Teilsummen der Zahler:",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.tertiary,
+                                    modifier = Modifier.padding(top = 2.dp, bottom = 2.dp)
+                                )
+                                payerSubtotals.forEach { (pName, pTotal) ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "↳ $pName",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            text = "+${fmt.format(pTotal)}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.tertiary
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
